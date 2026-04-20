@@ -18,10 +18,10 @@ export function BOMTable({ items }: { items: BOMItem[] }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">{total} item{total !== 1 ? 's' : ''} — click retailer links to search</p>
-      <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+      <div className="overflow-x-auto rounded-lg border border-white/8">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-700 bg-slate-800/60">
+            <tr className="border-b border-white/8 bg-[#0d0d0d]">
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Component</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium hidden md:table-cell">Specs</th>
               <th className="text-center px-4 py-3 text-slate-400 font-medium">Qty</th>

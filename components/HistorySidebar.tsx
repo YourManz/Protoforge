@@ -39,11 +39,11 @@ export function HistorySidebar() {
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-80 bg-slate-950 border-r border-slate-800 transform transition-transform duration-300 ${
+        className={`fixed top-0 left-0 z-50 h-full w-80 bg-black border-r border-white/8 transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
           <div className="flex items-center gap-2 text-white font-medium">
             <Clock className="h-4 w-4 text-slate-400" />
             Project History
@@ -65,7 +65,7 @@ export function HistorySidebar() {
                 <button
                   key={p.id}
                   onClick={() => { setCurrentProject(p); setSidebarOpen(false) }}
-                  className="w-full text-left rounded-lg border border-slate-800 bg-slate-900 hover:border-blue-700/50 hover:bg-slate-800/60 p-4 transition-colors group relative"
+                  className="w-full text-left rounded-lg border border-white/8 bg-[#0d0d0d] hover:border-blue-700/50 hover:bg-[#111] p-4 transition-colors group relative"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h4 className="font-medium text-white text-sm leading-tight line-clamp-2">{p.title}</h4>

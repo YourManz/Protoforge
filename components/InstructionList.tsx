@@ -22,11 +22,11 @@ export function InstructionList({ steps }: { steps: Step[] }) {
         return (
           <div
             key={step.number}
-            className="rounded-lg border border-slate-700/50 overflow-hidden"
+            className="rounded-lg border border-white/8 overflow-hidden"
           >
             <button
               onClick={() => toggle(step.number - 1)}
-              className="w-full flex items-center gap-4 px-5 py-4 bg-slate-900 hover:bg-slate-800/60 transition-colors text-left"
+              className="w-full flex items-center gap-4 px-5 py-4 bg-[#0d0d0d] hover:bg-[#111] transition-colors text-left"
             >
               <span className="flex-shrink-0 h-7 w-7 rounded-full bg-blue-600/20 border border-blue-600/40 text-blue-400 text-sm font-bold flex items-center justify-center">
                 {step.number}
@@ -40,7 +40,7 @@ export function InstructionList({ steps }: { steps: Step[] }) {
             </button>
 
             {isOpen && (
-              <div className="px-5 pb-5 pt-3 bg-slate-900/50 space-y-4 border-t border-slate-700/50">
+              <div className="px-5 pb-5 pt-3 bg-black space-y-4 border-t border-white/5">
                 <p className="text-sm text-slate-300 leading-relaxed">{step.description}</p>
 
                 {step.warning && (

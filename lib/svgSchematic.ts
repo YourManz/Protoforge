@@ -32,7 +32,7 @@ export function renderSchematicSVG(schematic: PCBSchematic): string {
     .map(
       (c) => `
   <g transform="translate(${c.pos.x},${c.pos.y})">
-    <rect width="${COMP_W}" height="${COMP_H}" rx="4" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
+    <rect width="${COMP_W}" height="${COMP_H}" rx="4" fill="#111111" stroke="#3b82f6" stroke-width="1.5"/>
     <text x="${COMP_W / 2}" y="18" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="monospace">${esc(c.id)}</text>
     <text x="${COMP_W / 2}" y="32" text-anchor="middle" fill="#f1f5f9" font-size="11" font-family="monospace" font-weight="bold">${esc(truncate(c.name, 14))}</text>
     <text x="${COMP_W / 2}" y="44" text-anchor="middle" fill="#64748b" font-size="9" font-family="monospace">${esc(c.package)}</text>
@@ -66,7 +66,7 @@ export function renderSchematicSVG(schematic: PCBSchematic): string {
     .join('\n')
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
-  <rect width="${totalW}" height="${totalH}" fill="#0f172a" rx="8"/>
+  <rect width="${totalW}" height="${totalH}" fill="#000000" rx="8"/>
   ${netSVG}
   ${compSVG}
   <text x="${totalW / 2}" y="${totalH - 12}" text-anchor="middle" fill="#334155" font-size="10" font-family="monospace">
