@@ -89,7 +89,7 @@ export async function generateProject(
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
+      max_tokens: 32000,
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -111,12 +111,17 @@ export async function generateProject(
   const data = await response.json()
   const text: string = data.content?.[0]?.text ?? ''
 
+  const stopReason: string = data.stop_reason ?? ''
+
   let project: ProtoforgeProject
   try {
     project = JSON.parse(text)
   } catch {
+    if (stopReason === 'max_tokens') {
+      throw new Error('Response was too long and got cut off. Try a simpler prompt or reduce the scope of the project.')
+    }
     const match = text.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Claude returned invalid JSON')
+    if (!match) throw new Error('Claude returned invalid JSON. Try again.')
     project = JSON.parse(match[0])
   }
 
