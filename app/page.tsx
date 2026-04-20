@@ -6,6 +6,7 @@ import { ProjectView } from '@/components/ProjectView'
 import { HistorySidebar } from '@/components/HistorySidebar'
 import { SettingsDrawer } from '@/components/SettingsDrawer'
 import { TerminalOverlay } from '@/components/TerminalOverlay'
+import { ProjectSuggester } from '@/components/ProjectSuggester'
 import { useStore } from '@/store/useStore'
 
 export default function Home() {
@@ -35,6 +36,7 @@ export default function Home() {
       </header>
 
       <HistorySidebar />
+      <ProjectSuggester />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-12">
         {!currentProject && !isGenerating && (

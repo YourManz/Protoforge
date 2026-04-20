@@ -71,3 +71,39 @@ export interface ProtoforgeProject {
 
   exportedAt?: string
 }
+
+// ── Clarification ──────────────────────────────────────────────
+export interface ClarificationSuggestion {
+  label: string
+  description: string
+  pros: string
+  cons: string
+}
+
+export interface ClarificationQuestion {
+  id: string
+  question: string
+  context: string
+  suggestions: ClarificationSuggestion[]
+}
+
+// ── Project Suggester ──────────────────────────────────────────
+export interface BuilderProfile {
+  goal: 'learn' | 'build'
+  budget: number
+  experience: Difficulty
+  tools: string[]
+  interests: string[]
+}
+
+export interface ProjectSuggestion {
+  title: string
+  description: string
+  difficulty: Difficulty
+  estimatedBudget: string
+  estimatedTime: string
+  skillsRequired: string[]
+  toolsRequired: string[]
+  whyRecommended: string
+  fullPrompt: string
+}

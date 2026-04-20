@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { ProtoforgeProject } from '@/types/project'
+import type { ProtoforgeProject, ClarificationQuestion, BuilderProfile, ProjectSuggestion } from '@/types/project'
 
 const SYSTEM_PROMPT = `You are Protoforge, an expert hardware engineer and maker.
 When given a description of a DIY hardware project, you generate a comprehensive, structured project guide.
@@ -157,6 +157,140 @@ export async function generateProjectStream(
   project.prompt = prompt
 
   return project
+}
+
+// ── Clarification questions ────────────────────────────────────
+const CLARIFY_SYSTEM = `You are a hardware engineering expert helping a maker clarify their project.
+Given a project description, identify the key technical decisions that would most impact the build.
+
+Return ONLY valid JSON — an array matching this type:
+[{
+  "id": "string (short snake_case key)",
+  "question": "concise technical question",
+  "context": "1-2 sentences: why this decision matters for this specific project",
+  "suggestions": [
+    { "label": "Option name", "description": "1-sentence description", "pros": "main advantage", "cons": "main tradeoff" },
+    { "label": "Option name", "description": "1-sentence description", "pros": "main advantage", "cons": "main tradeoff" },
+    { "label": "Option name", "description": "1-sentence description", "pros": "main advantage", "cons": "main tradeoff" }
+  ]
+}]
+
+Rules:
+- 3–4 questions maximum, ordered by impact
+- Each question has exactly 3 suggestions tailored to THIS project
+- Never ask about things clearly stated in the prompt
+- Keep all text concise (under 20 words per field)`
+
+export async function generateClarifications(
+  prompt: string,
+  apiKey: string,
+  onChunk: (text: string) => void
+): Promise<ClarificationQuestion[]> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      stream: true,
+      system: CLARIFY_SYSTEM,
+      messages: [{ role: 'user', content: `Project: ${prompt}` }],
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error((err as { error?: { message?: string } }).error?.message || `API error ${response.status}`)
+  }
+
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let accumulated = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value, { stream: true })
+    for (const line of chunk.split('\n')) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (payload === '[DONE]') continue
+      try {
+        const evt = JSON.parse(payload)
+        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+          const text: string = evt.delta.text ?? ''
+          accumulated += text
+          onChunk(text)
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  const match = accumulated.match(/\[[\s\S]*\]/)
+  if (!match) throw new Error('Could not parse clarification questions.')
+  return JSON.parse(match[0]) as ClarificationQuestion[]
+}
+
+// ── Project suggestions ────────────────────────────────────────
+const SUGGEST_SYSTEM = `You are a maker mentor. Given a builder's profile, suggest 5 hardware projects perfectly matched to their skills, budget, interests, and available tools.
+
+Return ONLY valid JSON — an array of exactly 5 items:
+[{
+  "title": "project title",
+  "description": "2-sentence overview",
+  "difficulty": "beginner" | "intermediate" | "advanced",
+  "estimatedBudget": "e.g. $30–$60",
+  "estimatedTime": "e.g. 1 weekend",
+  "skillsRequired": ["skill1", "skill2"],
+  "toolsRequired": ["tool1", "tool2"],
+  "whyRecommended": "1 sentence: why this fits their profile specifically",
+  "fullPrompt": "A fully detailed generation prompt with all specs, components, goals, and constraints written out so it can be used directly — 3-5 sentences"
+}]
+
+The fullPrompt must be rich enough that no clarification is needed — include: communication protocol, microcontroller choice, display type, power source, enclosure material, skill level context, and any constraints from their budget/tools.`
+
+export async function generateSuggestions(
+  profile: BuilderProfile,
+  apiKey: string
+): Promise<ProjectSuggestion[]> {
+  const profileText = `
+Goal: ${profile.goal === 'learn' ? 'Learning and skill development' : 'Building a functional product'}
+Budget: $${profile.budget}
+Experience: ${profile.experience}
+Available tools: ${profile.tools.join(', ') || 'basic hand tools'}
+Interests: ${profile.interests.join(', ') || 'general electronics'}`
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: SUGGEST_SYSTEM,
+      messages: [{ role: 'user', content: `Builder profile:\n${profileText}` }],
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error((err as { error?: { message?: string } }).error?.message || `API error ${response.status}`)
+  }
+
+  const data = await response.json()
+  const text: string = data.content?.[0]?.text ?? ''
+  const match = text.match(/\[[\s\S]*\]/)
+  if (!match) throw new Error('Could not parse project suggestions.')
+  return JSON.parse(match[0]) as ProjectSuggestion[]
 }
 
 export async function generateProject(

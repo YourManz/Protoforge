@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ProtoforgeProject } from '@/types/project'
+import type { ProtoforgeProject, ClarificationQuestion, ProjectSuggestion } from '@/types/project'
+
+export type TerminalPhase = 'idle' | 'clarifying' | 'asking' | 'generating'
 
 interface ProtoforgeState {
   apiKey: string
@@ -21,11 +23,35 @@ interface ProtoforgeState {
   settingsOpen: boolean
   setSettingsOpen: (v: boolean) => void
 
+  // Terminal streaming
   streamingText: string
   streamingStage: string
   appendStreamingText: (chunk: string) => void
   setStreamingStage: (stage: string) => void
   resetStreaming: () => void
+
+  // Clarification flow
+  terminalPhase: TerminalPhase
+  setTerminalPhase: (phase: TerminalPhase) => void
+  clarifications: ClarificationQuestion[]
+  setClarifications: (qs: ClarificationQuestion[]) => void
+  clarificationAnswers: Record<string, string>
+  answerClarification: (id: string, answer: string) => void
+  currentClarifyIdx: number
+  setCurrentClarifyIdx: (i: number) => void
+  pendingPrompt: string
+  setPendingPrompt: (p: string) => void
+  resetClarify: () => void
+
+  // Project suggester
+  suggesterOpen: boolean
+  setSuggesterOpen: (v: boolean) => void
+  suggestions: ProjectSuggestion[]
+  setSuggestions: (s: ProjectSuggestion[]) => void
+  suggestionsLoading: boolean
+  setSuggestionsLoading: (v: boolean) => void
+  suggestionsError: string | null
+  setSuggestionsError: (e: string | null) => void
 }
 
 export const useStore = create<ProtoforgeState>()(
@@ -55,6 +81,29 @@ export const useStore = create<ProtoforgeState>()(
         set((s) => ({ streamingText: s.streamingText + chunk })),
       setStreamingStage: (stage) => set({ streamingStage: stage }),
       resetStreaming: () => set({ streamingText: '', streamingStage: '' }),
+
+      terminalPhase: 'idle',
+      setTerminalPhase: (phase) => set({ terminalPhase: phase }),
+      clarifications: [],
+      setClarifications: (qs) => set({ clarifications: qs }),
+      clarificationAnswers: {},
+      answerClarification: (id, answer) =>
+        set((s) => ({ clarificationAnswers: { ...s.clarificationAnswers, [id]: answer } })),
+      currentClarifyIdx: 0,
+      setCurrentClarifyIdx: (i) => set({ currentClarifyIdx: i }),
+      pendingPrompt: '',
+      setPendingPrompt: (p) => set({ pendingPrompt: p }),
+      resetClarify: () =>
+        set({ clarifications: [], clarificationAnswers: {}, currentClarifyIdx: 0, pendingPrompt: '' }),
+
+      suggesterOpen: false,
+      setSuggesterOpen: (v) => set({ suggesterOpen: v }),
+      suggestions: [],
+      setSuggestions: (s) => set({ suggestions: s }),
+      suggestionsLoading: false,
+      setSuggestionsLoading: (v) => set({ suggestionsLoading: v }),
+      suggestionsError: null,
+      setSuggestionsError: (e) => set({ suggestionsError: e }),
     }),
     {
       name: 'protoforge-store',
