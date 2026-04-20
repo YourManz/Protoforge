@@ -5,8 +5,17 @@ import { Zap, Key, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useStore } from '@/store/useStore'
-import { generateProject } from '@/lib/claude'
+import { generateProjectStream } from '@/lib/claude'
 import { saveProject } from '@/lib/db'
+
+const STAGE_MARKERS = [
+  { marker: '"title"',        label: 'Analyzing project' },
+  { marker: '"instructions"', label: 'Planning build steps' },
+  { marker: '"bom"',          label: 'Sourcing components' },
+  { marker: '"customParts"',  label: 'Designing custom parts' },
+  { marker: '"kicadFile"',    label: 'Generating schematic' },
+  { marker: '"flowchart"',    label: 'Mapping build flow' },
+]
 
 const EXAMPLES = [
   'Arduino-based soil moisture sensor with automatic watering pump',
@@ -16,18 +25,33 @@ const EXAMPLES = [
 ]
 
 export function PromptForm() {
-  const { apiKey, setCurrentProject, setIsGenerating, isGenerating, setGenerationError, setSettingsOpen } = useStore()
+  const {
+    apiKey, setCurrentProject, setIsGenerating, isGenerating,
+    setGenerationError, setSettingsOpen,
+    appendStreamingText, setStreamingStage, resetStreaming,
+  } = useStore()
   const [prompt, setPrompt] = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!prompt.trim() || !apiKey || isGenerating) return
 
+    resetStreaming()
     setIsGenerating(true)
     setGenerationError(null)
 
+    const seenStages = new Set<string>()
+
     try {
-      const project = await generateProject(prompt.trim(), apiKey)
+      const project = await generateProjectStream(prompt.trim(), apiKey, (_chunk, accumulated) => {
+        appendStreamingText(_chunk)
+        for (const { marker, label } of STAGE_MARKERS) {
+          if (!seenStages.has(marker) && accumulated.includes(marker)) {
+            seenStages.add(marker)
+            setStreamingStage(label)
+          }
+        }
+      })
       await saveProject(project)
       setCurrentProject(project)
     } catch (err) {

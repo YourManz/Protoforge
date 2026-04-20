@@ -1,10 +1,11 @@
 'use client'
 
-import { History, Cpu, AlertCircle, X } from 'lucide-react'
+import { History, Cpu, AlertCircle, X } from 'lucide-react' // Cpu used in hero section
 import { PromptForm } from '@/components/PromptForm'
 import { ProjectView } from '@/components/ProjectView'
 import { HistorySidebar } from '@/components/HistorySidebar'
 import { SettingsDrawer } from '@/components/SettingsDrawer'
+import { TerminalOverlay } from '@/components/TerminalOverlay'
 import { useStore } from '@/store/useStore'
 
 export default function Home() {
@@ -68,18 +69,7 @@ export default function Home() {
           </div>
         )}
 
-        {isGenerating && (
-          <div className="flex flex-col items-center justify-center py-32 gap-4 text-slate-500">
-            <div className="relative h-12 w-12">
-              <div className="absolute inset-0 rounded-full border-2 border-blue-600/30 animate-ping" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Cpu className="h-5 w-5 text-blue-400 animate-pulse" />
-              </div>
-            </div>
-            <p className="text-sm">Generating your project…</p>
-            <p className="text-xs text-slate-600">This usually takes 15–30 seconds</p>
-          </div>
-        )}
+        {isGenerating && <TerminalOverlay />}
 
         {!isGenerating && currentProject && <ProjectView project={currentProject} />}
 

@@ -20,6 +20,12 @@ interface ProtoforgeState {
 
   settingsOpen: boolean
   setSettingsOpen: (v: boolean) => void
+
+  streamingText: string
+  streamingStage: string
+  appendStreamingText: (chunk: string) => void
+  setStreamingStage: (stage: string) => void
+  resetStreaming: () => void
 }
 
 export const useStore = create<ProtoforgeState>()(
@@ -42,6 +48,13 @@ export const useStore = create<ProtoforgeState>()(
 
       settingsOpen: false,
       setSettingsOpen: (v) => set({ settingsOpen: v }),
+
+      streamingText: '',
+      streamingStage: '',
+      appendStreamingText: (chunk) =>
+        set((s) => ({ streamingText: s.streamingText + chunk })),
+      setStreamingStage: (stage) => set({ streamingStage: stage }),
+      resetStreaming: () => set({ streamingText: '', streamingStage: '' }),
     }),
     {
       name: 'protoforge-store',

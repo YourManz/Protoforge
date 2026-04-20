@@ -75,6 +75,90 @@ Rules:
 - Include at minimum 4 instruction steps
 - Be specific and practical — this is for real builders`
 
+export async function generateProjectStream(
+  prompt: string,
+  apiKey: string,
+  onChunk: (text: string, accumulated: string) => void
+): Promise<ProtoforgeProject> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 32000,
+      stream: true,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a complete Protoforge project guide for: ${prompt}`,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(
+      (err as { error?: { message?: string } }).error?.message ||
+        `API error ${response.status}`
+    )
+  }
+
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let accumulated = ''
+  let stopReason = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    const chunk = decoder.decode(value, { stream: true })
+    for (const line of chunk.split('\n')) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (payload === '[DONE]') continue
+      try {
+        const evt = JSON.parse(payload)
+        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+          const text: string = evt.delta.text ?? ''
+          accumulated += text
+          onChunk(text, accumulated)
+        }
+        if (evt.type === 'message_delta' && evt.delta?.stop_reason) {
+          stopReason = evt.delta.stop_reason
+        }
+      } catch {
+        // malformed SSE line — skip
+      }
+    }
+  }
+
+  let project: ProtoforgeProject
+  try {
+    project = JSON.parse(accumulated)
+  } catch {
+    if (stopReason === 'max_tokens') {
+      throw new Error('Response was too long and got cut off. Try a simpler prompt.')
+    }
+    const match = accumulated.match(/\{[\s\S]*\}/)
+    if (!match) throw new Error('Claude returned invalid JSON. Try again.')
+    project = JSON.parse(match[0])
+  }
+
+  project.id = uuidv4()
+  project.createdAt = new Date().toISOString()
+  project.prompt = prompt
+
+  return project
+}
+
 export async function generateProject(
   prompt: string,
   apiKey: string
