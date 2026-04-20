@@ -94,7 +94,7 @@ export default function Home() {
             View on GitHub
           </a>
         </p>
-        <p className="mt-1 text-slate-700 font-mono">build 93b2bd4</p>
+        <p className="mt-1 text-slate-500 font-mono">build 93b2bd4</p>
       </footer>
     </div>
   )
