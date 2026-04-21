@@ -4,6 +4,17 @@
   --font-mono: var(--font-mono), ui-monospace, monospace;
 }
 
+@keyframes circuit-pulse {
+  0%   { stroke-dashoffset: 16; }
+  100% { stroke-dashoffset: -1416; }
+}
+
+.circuit-pulse-0 { animation: circuit-pulse 3.2s linear infinite; }
+.circuit-pulse-1 { animation: circuit-pulse 4.8s linear infinite; }
+.circuit-pulse-2 { animation: circuit-pulse 5.6s linear infinite; }
+.circuit-pulse-3 { animation: circuit-pulse 3.9s linear infinite; }
+.circuit-pulse-4 { animation: circuit-pulse 6.4s linear infinite; }
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;

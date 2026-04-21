@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { startGeneration } from '@/lib/generation'
+import { CircuitBackground } from '@/components/CircuitBackground'
 
 const GEN_STAGES = [
   { marker: '"title"',        label: 'Analyzing project' },
@@ -165,8 +166,9 @@ export function TerminalOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl flex gap-4" style={{ height: terminalPhase === 'asking' ? 'auto' : '600px', maxHeight: '90vh' }}>
+    <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
+      <CircuitBackground />
+      <div className="relative w-full max-w-4xl flex gap-4" style={{ height: terminalPhase === 'asking' ? 'auto' : '600px', maxHeight: '90vh' }}>
 
         {terminalPhase === 'generating' && (
           <div className="w-52 shrink-0 flex flex-col gap-1 pt-10">
