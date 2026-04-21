@@ -1,21 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { Zap, Key, Sparkles, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useStore } from '@/store/useStore'
-import { generateClarifications, generateProjectStream } from '@/lib/claude'
-import { saveProject } from '@/lib/db'
-
-const STAGE_MARKERS = [
-  { marker: '"title"',        label: 'Analyzing project' },
-  { marker: '"instructions"', label: 'Planning build steps' },
-  { marker: '"bom"',          label: 'Sourcing components' },
-  { marker: '"customParts"',  label: 'Designing custom parts' },
-  { marker: '"kicadFile"',    label: 'Generating schematic' },
-  { marker: '"flowchart"',    label: 'Mapping build flow' },
-]
+import { generateClarifications } from '@/lib/claude'
+import { startGeneration } from '@/lib/generation'
 
 const EXAMPLES = [
   'Arduino-based soil moisture sensor with automatic watering pump',
@@ -26,60 +17,14 @@ const EXAMPLES = [
 
 export function PromptForm() {
   const {
-    apiKey, setCurrentProject, setIsGenerating, isGenerating,
+    apiKey, setIsGenerating, isGenerating,
     setGenerationError, setSettingsOpen, setSuggesterOpen,
-    appendStreamingText, setStreamingStage, resetStreaming,
-    terminalPhase, setTerminalPhase,
-    clarifications, setClarifications, clarificationAnswers,
-    setPendingPrompt, pendingPrompt, resetClarify,
+    appendStreamingText, resetStreaming,
+    setTerminalPhase, setClarifications,
+    setPendingPrompt, resetClarify,
   } = useStore()
 
   const [prompt, setPrompt] = useState('')
-  const seenStagesRef = useRef(new Set<string>())
-  const answersRef = useRef<Record<string, string>>({})
-
-  // Keep answersRef in sync with store
-  useEffect(() => {
-    answersRef.current = clarificationAnswers
-  }, [clarificationAnswers])
-
-  // Phase 2: when terminal transitions to 'generating', kick off the main generation
-  useEffect(() => {
-    if (terminalPhase !== 'generating') return
-    runGeneration()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terminalPhase])
-
-  async function runGeneration() {
-    const answers = answersRef.current
-    const enrichedPrompt = clarifications.length > 0
-      ? `${pendingPrompt}\n\nTechnical decisions already made:\n${
-          clarifications.map((q) => `- ${q.question}: ${answers[q.id] ?? 'not specified'}`).join('\n')
-        }`
-      : pendingPrompt
-
-    seenStagesRef.current = new Set()
-
-    try {
-      const project = await generateProjectStream(enrichedPrompt, apiKey, (_chunk, accumulated) => {
-        appendStreamingText(_chunk)
-        for (const { marker, label } of STAGE_MARKERS) {
-          if (!seenStagesRef.current.has(marker) && accumulated.includes(marker)) {
-            seenStagesRef.current.add(marker)
-            setStreamingStage(label)
-          }
-        }
-      })
-      await saveProject(project)
-      setCurrentProject(project)
-    } catch (err) {
-      setGenerationError(err instanceof Error ? err.message : 'Generation failed')
-    } finally {
-      setIsGenerating(false)
-      setTerminalPhase('idle')
-      resetClarify()
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -99,15 +44,15 @@ export function PromptForm() {
       })
       setClarifications(questions)
       if (questions.length === 0) {
-        setTerminalPhase('generating')
+        resetStreaming()
+        startGeneration()
       } else {
         resetStreaming()
         setTerminalPhase('asking')
       }
     } catch {
-      // If clarification fails, skip it and go straight to generation
       resetStreaming()
-      setTerminalPhase('generating')
+      startGeneration()
     }
   }
 

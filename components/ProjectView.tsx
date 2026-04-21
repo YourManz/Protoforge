@@ -1,6 +1,6 @@
 'use client'
 
-import { Clock, Wrench, GitBranch, Package, Cpu, Layers, ArrowLeft } from 'lucide-react'
+import { Clock, Wrench, GitBranch, Package, Cpu, Layers, ArrowLeft, MessageCircle, Link2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { BOMTable } from '@/components/BOMTable'
 import { FlowChart } from '@/components/FlowChart'
@@ -8,6 +8,8 @@ import { PCBSchematic } from '@/components/PCBSchematic'
 import { PrintedPartCard } from '@/components/PrintedPartCard'
 import { InstructionList } from '@/components/InstructionList'
 import { ExportButton } from '@/components/ExportButton'
+import { ChatPanel } from '@/components/ChatPanel'
+import { ResourcesPanel } from '@/components/ResourcesPanel'
 import { useStore } from '@/store/useStore'
 import type { ProtoforgeProject } from '@/types/project'
 
@@ -36,9 +38,18 @@ function Section({ icon, title, children }: SectionProps) {
 }
 
 export function ProjectView({ project }: { project: ProtoforgeProject }) {
-  const { setCurrentProject } = useStore()
+  const { setCurrentProject, chatOpen, setChatOpen, setResources } = useStore()
   const hasPCB = project.customParts.pcb !== null
   const hasPrinted = project.customParts.printedParts.length > 0
+
+  function handleChatToggle() {
+    if (chatOpen) {
+      setChatOpen(false)
+    } else {
+      setResources([])
+      setChatOpen(true)
+    }
+  }
 
   return (
     <div id="project-export-root" className="space-y-10 pb-16">
@@ -78,6 +89,11 @@ export function ProjectView({ project }: { project: ProtoforgeProject }) {
         </div>
       </div>
 
+      {/* Resources */}
+      <Section icon={<Link2 className="h-4 w-4" />} title="Resources">
+        <ResourcesPanel project={project} />
+      </Section>
+
       {/* Flowchart */}
       <Section icon={<GitBranch className="h-4 w-4" />} title="Build Flowchart">
         <FlowChart definition={project.flowchart} />
@@ -116,6 +132,22 @@ export function ProjectView({ project }: { project: ProtoforgeProject }) {
           </div>
         </Section>
       )}
+
+      {/* Chat panel */}
+      <ChatPanel project={project} />
+
+      {/* Floating chat button */}
+      <button
+        onClick={handleChatToggle}
+        className={`fixed bottom-6 right-6 z-30 flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
+          chatOpen
+            ? 'bg-white/10 border border-white/20 text-white'
+            : 'bg-sky-600 hover:bg-sky-500 text-white'
+        }`}
+      >
+        <MessageCircle className="h-4 w-4" />
+        <span className="text-sm font-medium">{chatOpen ? 'Close chat' : 'Ask / Edit'}</span>
+      </button>
     </div>
   )
 }

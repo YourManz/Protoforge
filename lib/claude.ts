@@ -1,5 +1,10 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { v4 as uuidv4 } from 'uuid'
-import type { ProtoforgeProject, ClarificationQuestion, BuilderProfile, ProjectSuggestion } from '@/types/project'
+import type { ProtoforgeProject, ClarificationQuestion, BuilderProfile, ProjectSuggestion, ChatMessage, ProjectResource } from '@/types/project'
+
+function getClient(apiKey: string) {
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+}
 
 const SYSTEM_PROMPT = `You are Protoforge, an expert hardware engineer and maker.
 When given a description of a DIY hardware project, you generate a comprehensive, structured project guide.
@@ -80,73 +85,40 @@ export async function generateProjectStream(
   apiKey: string,
   onChunk: (text: string, accumulated: string) => void
 ): Promise<ProtoforgeProject> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 32000,
-      stream: true,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Generate a complete Protoforge project guide for: ${prompt}`,
-        },
-      ],
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(
-      (err as { error?: { message?: string } }).error?.message ||
-        `API error ${response.status}`
-    )
-  }
-
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
+  const client = getClient(apiKey)
   let accumulated = ''
-  let stopReason = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 90_000)
 
-    const chunk = decoder.decode(value, { stream: true })
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue
-      const payload = line.slice(6).trim()
-      if (payload === '[DONE]') continue
-      try {
-        const evt = JSON.parse(payload)
-        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-          const text: string = evt.delta.text ?? ''
-          accumulated += text
-          onChunk(text, accumulated)
-        }
-        if (evt.type === 'message_delta' && evt.delta?.stop_reason) {
-          stopReason = evt.delta.stop_reason
-        }
-      } catch {
-        // malformed SSE line — skip
-      }
+  try {
+    const stream = client.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: `Generate a complete Protoforge project guide for: ${prompt}` }],
+    } as Anthropic.MessageStreamParams, { signal: controller.signal })
+
+    // Prevent unhandled 'error' events from swallowing API errors in browser environments
+    stream.on('error', () => {})
+
+    stream.on('text', (text) => {
+      accumulated += text
+      onChunk(text, accumulated)
+    })
+
+    const msg = await stream.finalMessage()
+    if (msg.stop_reason === 'max_tokens') {
+      throw new Error('Response was too long and got cut off. Try a simpler prompt.')
     }
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   let project: ProtoforgeProject
   try {
     project = JSON.parse(accumulated)
   } catch {
-    if (stopReason === 'max_tokens') {
-      throw new Error('Response was too long and got cut off. Try a simpler prompt.')
-    }
     const match = accumulated.match(/\{[\s\S]*\}/)
     if (!match) throw new Error('Claude returned invalid JSON. Try again.')
     project = JSON.parse(match[0])
@@ -186,50 +158,19 @@ export async function generateClarifications(
   apiKey: string,
   onChunk: (text: string) => void
 ): Promise<ClarificationQuestion[]> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      stream: true,
-      system: CLARIFY_SYSTEM,
-      messages: [{ role: 'user', content: `Project: ${prompt}` }],
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } }).error?.message || `API error ${response.status}`)
-  }
-
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
+  const client = getClient(apiKey)
   let accumulated = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue
-      const payload = line.slice(6).trim()
-      if (payload === '[DONE]') continue
-      try {
-        const evt = JSON.parse(payload)
-        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-          const text: string = evt.delta.text ?? ''
-          accumulated += text
-          onChunk(text)
-        }
-      } catch { /* skip */ }
-    }
-  }
+  const stream = client.messages.stream({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: CLARIFY_SYSTEM,
+    messages: [{ role: 'user', content: `Project: ${prompt}` }],
+  } as Anthropic.MessageStreamParams)
+
+  stream.on('error', () => {})
+  stream.on('text', (text) => { accumulated += text; onChunk(text) })
+  await stream.finalMessage()
 
   const match = accumulated.match(/\[[\s\S]*\]/)
   if (!match) throw new Error('Could not parse clarification questions.')
@@ -256,8 +197,10 @@ The fullPrompt must be rich enough that no clarification is needed — include: 
 
 export async function generateSuggestions(
   profile: BuilderProfile,
-  apiKey: string
+  apiKey: string,
+  onChunk?: (text: string) => void
 ): Promise<ProjectSuggestion[]> {
+  const client = getClient(apiKey)
   const profileText = `
 Goal: ${profile.goal === 'learn' ? 'Learning and skill development' : 'Building a functional product'}
 Budget: $${profile.budget}
@@ -265,87 +208,148 @@ Experience: ${profile.experience}
 Available tools: ${profile.tools.join(', ') || 'basic hand tools'}
 Interests: ${profile.interests.join(', ') || 'general electronics'}`
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: SUGGEST_SYSTEM,
-      messages: [{ role: 'user', content: `Builder profile:\n${profileText}` }],
-    }),
-  })
+  let accumulated = ''
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } }).error?.message || `API error ${response.status}`)
-  }
+  const stream = client.messages.stream({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4096,
+    system: SUGGEST_SYSTEM,
+    messages: [{ role: 'user', content: `Builder profile:\n${profileText}` }],
+  } as Anthropic.MessageStreamParams)
 
-  const data = await response.json()
-  const text: string = data.content?.[0]?.text ?? ''
-  const match = text.match(/\[[\s\S]*\]/)
+  stream.on('error', () => {})
+  stream.on('text', (text) => { accumulated += text; onChunk?.(text) })
+  await stream.finalMessage()
+
+  const match = accumulated.match(/\[[\s\S]*\]/)
   if (!match) throw new Error('Could not parse project suggestions.')
   return JSON.parse(match[0]) as ProjectSuggestion[]
 }
 
-export async function generateProject(
-  prompt: string,
+// ── Chat — Learn mode ──────────────────────────────────────────
+const LEARN_SYSTEM = `You are an expert hardware engineer and maker explaining a DIY project to a builder.
+Answer questions clearly and concisely. Use markdown for formatting.
+Explain concepts in practical terms — focus on WHY, not just WHAT.
+When referencing project specifics, be precise about component values and connections.
+Keep answers under 400 words unless a detailed explanation is truly needed.`
+
+export async function chatLearn(
+  project: ProtoforgeProject,
+  messages: ChatMessage[],
+  apiKey: string,
+  onChunk: (text: string) => void
+): Promise<string> {
+  const client = getClient(apiKey)
+  const projectSummary = `Project: ${project.title}
+Description: ${project.description}
+Skills: ${project.skillsRequired.join(', ')}
+Key components: ${project.bom.slice(0, 5).map(b => b.name).join(', ')}`
+
+  let accumulated = ''
+  const stream = client.messages.stream({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    system: `${LEARN_SYSTEM}\n\nProject context:\n${projectSummary}`,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  } as Anthropic.MessageStreamParams)
+
+  stream.on('error', () => {})
+  stream.on('text', (text) => { accumulated += text; onChunk(text) })
+  await stream.finalMessage()
+  return accumulated
+}
+
+// ── Chat — Edit mode ───────────────────────────────────────────
+const EDIT_SYSTEM = `You are an expert hardware engineer editing a Protoforge project based on user requests.
+
+The user will describe changes they want. You must:
+1. Return a JSON object with ONLY the fields that need to change (partial update)
+2. Then add an "explanation" field (string) explaining what you changed and why
+
+Response format — valid JSON only:
+{
+  "explanation": "Brief description of changes made",
+  "title": "...",            // only if title changes
+  "bom": [...],              // only if BOM changes
+  "instructions": [...],     // only if instructions change
+  "customParts": {...},      // only if custom parts change
+  "flowchart": "..."         // only if flowchart changes
+}
+
+Rules:
+- Include ONLY fields that change — omit unchanged fields
+- explanation is always required
+- Keep the same structure/types as the original project
+- BOM URLs must follow the same URL-encoded format
+- If adding components, include all required BOM fields`
+
+export async function chatEdit(
+  project: ProtoforgeProject,
+  messages: ChatMessage[],
+  apiKey: string,
+  onChunk: (text: string) => void
+): Promise<{ updatedProject: ProtoforgeProject; explanation: string }> {
+  const client = getClient(apiKey)
+  let accumulated = ''
+
+  const stream = client.messages.stream({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8192,
+    system: `${EDIT_SYSTEM}\n\nCurrent project JSON:\n${JSON.stringify(project, null, 2)}`,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+  } as Anthropic.MessageStreamParams)
+
+  stream.on('error', () => {})
+  stream.on('text', (text) => { accumulated += text; onChunk(text) })
+  await stream.finalMessage()
+
+  const match = accumulated.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('Could not parse edit response.')
+  const patch = JSON.parse(match[0]) as Record<string, unknown>
+  const explanation = (patch.explanation as string) ?? 'Project updated.'
+  delete patch.explanation
+
+  const updatedProject: ProtoforgeProject = { ...project, ...(patch as Partial<ProtoforgeProject>) }
+  return { updatedProject, explanation }
+}
+
+// ── Resources ──────────────────────────────────────────────────
+const RESOURCES_SYSTEM = `You are a hardware engineering expert curating learning resources for a maker.
+Given a project, return 6 high-quality external resources.
+
+Return ONLY valid JSON — an array of exactly 6 items:
+[{
+  "type": "datasheet" | "tutorial" | "documentation" | "github" | "video" | "forum",
+  "title": "resource title",
+  "description": "1-sentence description of what this resource provides",
+  "url": "https://...",
+  "relevance": "1 sentence: why specifically useful for this project"
+}]
+
+Rules:
+- Mix types: 1-2 datasheets, 1-2 tutorials, 1 github repo, 1 video or forum post
+- Use real, stable URLs (Arduino docs, GitHub, Adafruit, SparkFun, Instructables, YouTube)
+- Focus on the main IC or microcontroller first, then the project domain
+- No paywalled content`
+
+export async function generateResources(
+  project: ProtoforgeProject,
   apiKey: string
-): Promise<ProtoforgeProject> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 32000,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Generate a complete Protoforge project guide for: ${prompt}`,
-        },
-      ],
-    }),
+): Promise<ProjectResource[]> {
+  const client = getClient(apiKey)
+  const projectSummary = `Title: ${project.title}
+Components: ${project.bom.map(b => b.name).join(', ')}
+Skills: ${project.skillsRequired.join(', ')}`
+
+  const msg = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    system: RESOURCES_SYSTEM,
+    messages: [{ role: 'user', content: `Project:\n${projectSummary}` }],
   })
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(
-      (err as { error?: { message?: string } }).error?.message ||
-        `API error ${response.status}`
-    )
-  }
-
-  const data = await response.json()
-  const text: string = data.content?.[0]?.text ?? ''
-
-  const stopReason: string = data.stop_reason ?? ''
-
-  let project: ProtoforgeProject
-  try {
-    project = JSON.parse(text)
-  } catch {
-    if (stopReason === 'max_tokens') {
-      throw new Error('Response was too long and got cut off. Try a simpler prompt or reduce the scope of the project.')
-    }
-    const match = text.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Claude returned invalid JSON. Try again.')
-    project = JSON.parse(match[0])
-  }
-
-  project.id = uuidv4()
-  project.createdAt = new Date().toISOString()
-  project.prompt = prompt
-
-  return project
+  const text = msg.content[0].type === 'text' ? msg.content[0].text : ''
+  const match = text.match(/\[[\s\S]*\]/)
+  if (!match) throw new Error('Could not parse resources.')
+  return JSON.parse(match[0]) as ProjectResource[]
 }

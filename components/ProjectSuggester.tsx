@@ -7,7 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { SuggestionCard } from '@/components/SuggestionCard'
 import { useStore } from '@/store/useStore'
 import { generateSuggestions } from '@/lib/claude'
-import type { BuilderProfile } from '@/types/project'
+import { startGeneration } from '@/lib/generation'
+import type { BuilderProfile, ProjectSuggestion } from '@/types/project'
 
 const TOOLS = [
   { id: 'screwdriver',    label: 'Screwdriver & drill' },
@@ -51,8 +52,8 @@ function ToggleBtn({ active, onClick, children }: { active: boolean; onClick: ()
 type Step = 'form' | 'results'
 
 export function ProjectSuggester() {
-  const { suggesterOpen, setSuggesterOpen, apiKey, suggestions, setSuggestions, suggestionsLoading, setSuggestionsLoading, suggestionsError, setSuggestionsError, setSuggesterOpen: close } = useStore()
-  const { setIsGenerating, setGenerationError, setCurrentProject, appendStreamingText, setStreamingStage, resetStreaming, setTerminalPhase, setPendingPrompt, setClarifications, resetClarify } = useStore()
+  const { suggesterOpen, setSuggesterOpen, apiKey, suggestions, setSuggestions, suggestionsLoading, setSuggestionsLoading, suggestionsError, setSuggestionsError } = useStore()
+  const { setIsGenerating, setGenerationError, resetStreaming, setPendingPrompt, setClarifications, resetClarify } = useStore()
 
   const [step, setStep] = useState<Step>('form')
   const [goal, setGoal] = useState<'learn' | 'build'>('build')
@@ -79,8 +80,19 @@ export function ProjectSuggester() {
       interests,
     }
 
+    let accumulated = ''
     try {
-      const results = await generateSuggestions(profile, apiKey)
+      const results = await generateSuggestions(profile, apiKey, (chunk) => {
+        accumulated += chunk
+        const matches = accumulated.match(/\{[\s\S]*?"fullPrompt"[\s\S]*?\}/g) ?? []
+        if (matches.length > 0) {
+          try {
+            const partial = matches.map(m => JSON.parse(m) as ProjectSuggestion)
+            setSuggestions(partial)
+            setSuggestionsLoading(partial.length < 5)
+          } catch { /* incomplete JSON — wait for more */ }
+        }
+      })
       setSuggestions(results)
     } catch (err) {
       setSuggestionsError(err instanceof Error ? err.message : 'Failed to generate suggestions')
@@ -91,15 +103,13 @@ export function ProjectSuggester() {
 
   function handleGenerate(fullPrompt: string) {
     setSuggesterOpen(false)
-
-    // Start the generation flow directly (skip clarifications since prompt is already detailed)
     resetStreaming()
     resetClarify()
     setPendingPrompt(fullPrompt)
     setClarifications([])
     setIsGenerating(true)
     setGenerationError(null)
-    setTerminalPhase('generating')
+    startGeneration()
   }
 
   if (!suggesterOpen) return null
@@ -107,7 +117,6 @@ export function ProjectSuggester() {
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/8 shrink-0">
           <div className="flex items-center gap-2">
             <Lightbulb className="h-4 w-4 text-amber-400" />
@@ -126,20 +135,14 @@ export function ProjectSuggester() {
         {step === 'form' && (
           <ScrollArea className="flex-1">
             <div className="p-6 space-y-7">
-              {/* Goal */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">What&apos;s your goal?</label>
                 <div className="flex gap-2">
-                  <ToggleBtn active={goal === 'learn'} onClick={() => setGoal('learn')}>
-                    📚 Learn & experiment
-                  </ToggleBtn>
-                  <ToggleBtn active={goal === 'build'} onClick={() => setGoal('build')}>
-                    🔧 Build something real
-                  </ToggleBtn>
+                  <ToggleBtn active={goal === 'learn'} onClick={() => setGoal('learn')}>📚 Learn & experiment</ToggleBtn>
+                  <ToggleBtn active={goal === 'build'} onClick={() => setGoal('build')}>🔧 Build something real</ToggleBtn>
                 </div>
               </div>
 
-              {/* Experience */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">Experience level</label>
                 <div className="flex gap-2">
@@ -151,7 +154,6 @@ export function ProjectSuggester() {
                 </div>
               </div>
 
-              {/* Budget */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">
                   Budget: <span className="text-sky-400 font-mono">${budget}</span>
@@ -168,32 +170,22 @@ export function ProjectSuggester() {
                 </div>
               </div>
 
-              {/* Tools */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">Tools you have access to</label>
                 <div className="flex flex-wrap gap-2">
                   {TOOLS.map((t) => (
-                    <ToggleBtn
-                      key={t.id}
-                      active={tools.includes(t.id)}
-                      onClick={() => setTools(toggle(tools, t.id))}
-                    >
+                    <ToggleBtn key={t.id} active={tools.includes(t.id)} onClick={() => setTools(toggle(tools, t.id))}>
                       {t.label}
                     </ToggleBtn>
                   ))}
                 </div>
               </div>
 
-              {/* Interests */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-300">Areas of interest</label>
                 <div className="flex flex-wrap gap-2">
                   {INTERESTS.map((interest) => (
-                    <ToggleBtn
-                      key={interest}
-                      active={interests.includes(interest)}
-                      onClick={() => setInterests(toggle(interests, interest))}
-                    >
+                    <ToggleBtn key={interest} active={interests.includes(interest)} onClick={() => setInterests(toggle(interests, interest))}>
                       {interest}
                     </ToggleBtn>
                   ))}
@@ -226,7 +218,6 @@ export function ProjectSuggester() {
           </ScrollArea>
         )}
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-white/8 shrink-0">
           {step === 'form' ? (
             <Button onClick={handleSubmit} disabled={!apiKey} className="w-full gap-2">

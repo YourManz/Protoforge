@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ProtoforgeProject, ClarificationQuestion, ProjectSuggestion } from '@/types/project'
+import type { ProtoforgeProject, ClarificationQuestion, ProjectSuggestion, ChatMessage, ChatMode, ProjectResource } from '@/types/project'
 
 export type TerminalPhase = 'idle' | 'clarifying' | 'asking' | 'generating'
 
@@ -52,6 +52,24 @@ interface ProtoforgeState {
   setSuggestionsLoading: (v: boolean) => void
   suggestionsError: string | null
   setSuggestionsError: (e: string | null) => void
+
+  // Chat
+  chatOpen: boolean
+  setChatOpen: (v: boolean) => void
+  chatMode: ChatMode
+  setChatMode: (mode: ChatMode) => void
+  chatMessages: ChatMessage[]
+  appendChatMessage: (msg: ChatMessage) => void
+  updateLastChatMessage: (content: string) => void
+  clearChat: () => void
+  chatLoading: boolean
+  setChatLoading: (v: boolean) => void
+
+  // Resources
+  resources: ProjectResource[]
+  setResources: (r: ProjectResource[]) => void
+  resourcesLoading: boolean
+  setResourcesLoading: (v: boolean) => void
 }
 
 export const useStore = create<ProtoforgeState>()(
@@ -104,6 +122,28 @@ export const useStore = create<ProtoforgeState>()(
       setSuggestionsLoading: (v) => set({ suggestionsLoading: v }),
       suggestionsError: null,
       setSuggestionsError: (e) => set({ suggestionsError: e }),
+
+      chatOpen: false,
+      setChatOpen: (v) => set({ chatOpen: v }),
+      chatMode: 'learn',
+      setChatMode: (mode) => set({ chatMode: mode }),
+      chatMessages: [],
+      appendChatMessage: (msg) =>
+        set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+      updateLastChatMessage: (content) =>
+        set((s) => {
+          const msgs = [...s.chatMessages]
+          if (msgs.length > 0) msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content, isStreaming: false }
+          return { chatMessages: msgs }
+        }),
+      clearChat: () => set({ chatMessages: [] }),
+      chatLoading: false,
+      setChatLoading: (v) => set({ chatLoading: v }),
+
+      resources: [],
+      setResources: (r) => set({ resources: r }),
+      resourcesLoading: false,
+      setResourcesLoading: (v) => set({ resourcesLoading: v }),
     }),
     {
       name: 'protoforge-store',

@@ -72,6 +72,26 @@ export interface ProtoforgeProject {
   exportedAt?: string
 }
 
+// ── Chat ───────────────────────────────────────────────────────
+export type ChatMode = 'learn' | 'edit'
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  isStreaming?: boolean
+  editSummary?: string
+}
+
+export interface ProjectResource {
+  type: 'datasheet' | 'tutorial' | 'documentation' | 'github' | 'video' | 'forum'
+  title: string
+  description: string
+  url: string
+  relevance: string
+}
+
 // ── Clarification ──────────────────────────────────────────────
 export interface ClarificationSuggestion {
   label: string

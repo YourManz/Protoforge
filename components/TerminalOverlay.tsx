@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { startGeneration } from '@/lib/generation'
 
 const GEN_STAGES = [
   { marker: '"title"',        label: 'Analyzing project' },
@@ -50,7 +51,7 @@ function colorizeLine(line: string): React.ReactNode {
 function ClarifyPanel() {
   const {
     clarifications, clarificationAnswers, currentClarifyIdx,
-    answerClarification, setCurrentClarifyIdx, setTerminalPhase,
+    answerClarification, setCurrentClarifyIdx,
   } = useStore()
   const [customInput, setCustomInput] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
@@ -63,7 +64,7 @@ function ClarifyPanel() {
   function choose(answer: string) {
     answerClarification(q.id, answer)
     if (isLast) {
-      setTerminalPhase('generating')
+      startGeneration()
     } else {
       setSelected(null)
       setCustomInput('')
@@ -73,7 +74,6 @@ function ClarifyPanel() {
 
   return (
     <div className="border-t border-white/8 bg-[#0a0a0a] p-5 space-y-4">
-      {/* Progress dots */}
       <div className="flex items-center gap-1.5">
         {clarifications.map((_, i) => (
           <div
@@ -90,13 +90,11 @@ function ClarifyPanel() {
         </span>
       </div>
 
-      {/* Question */}
       <div className="space-y-1">
         <p className="text-sm text-white font-medium">{q.question}</p>
         <p className="text-xs text-slate-500 leading-relaxed">{q.context}</p>
       </div>
 
-      {/* Suggestion buttons */}
       <div className="grid gap-2">
         {q.suggestions.map((s, i) => (
           <button
@@ -121,7 +119,6 @@ function ClarifyPanel() {
         ))}
       </div>
 
-      {/* Custom input */}
       <div className="flex gap-2 items-center">
         <span className="text-slate-600 font-mono text-xs shrink-0">$</span>
         <input
@@ -171,7 +168,6 @@ export function TerminalOverlay() {
     <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-4xl flex gap-4" style={{ height: terminalPhase === 'asking' ? 'auto' : '600px', maxHeight: '90vh' }}>
 
-        {/* Stage sidebar — only during generation */}
         {terminalPhase === 'generating' && (
           <div className="w-52 shrink-0 flex flex-col gap-1 pt-10">
             <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-3 font-mono">Progress</p>
@@ -194,9 +190,7 @@ export function TerminalOverlay() {
           </div>
         )}
 
-        {/* Terminal window */}
         <div className="flex-1 flex flex-col border border-white/8 rounded-xl overflow-hidden bg-[#080808]">
-          {/* Title bar */}
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-[#0d0d0d] shrink-0">
             <div className="flex gap-1.5">
               <div className="h-3 w-3 rounded-full bg-red-500/70" />
@@ -209,7 +203,6 @@ export function TerminalOverlay() {
             <div className="w-12" />
           </div>
 
-          {/* Stream text */}
           <div ref={scrollRef} className={`overflow-y-auto p-4 font-mono text-xs leading-5 ${terminalPhase === 'asking' ? 'h-32' : 'flex-1'}`}>
             {streamingText === '' ? (
               <span className="text-slate-700">
@@ -231,7 +224,6 @@ export function TerminalOverlay() {
             )}
           </div>
 
-          {/* Clarification Q&A panel */}
           {terminalPhase === 'asking' && <ClarifyPanel />}
         </div>
       </div>
