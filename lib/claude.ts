@@ -89,12 +89,12 @@ export async function generateProjectStream(
   let accumulated = ''
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 90_000)
+  const timeoutId = setTimeout(() => controller.abort(), 300_000)
 
   try {
     const stream = client.messages.stream({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: `Generate a complete Protoforge project guide for: ${prompt}` }],
     } as Anthropic.MessageStreamParams, { signal: controller.signal })
@@ -294,7 +294,7 @@ export async function chatEdit(
 
   const stream = client.messages.stream({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8192,
+    max_tokens: 16000,
     system: `${EDIT_SYSTEM}\n\nCurrent project JSON:\n${JSON.stringify(project, null, 2)}`,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
   } as Anthropic.MessageStreamParams)
